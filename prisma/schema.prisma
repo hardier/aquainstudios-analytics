@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// Landing zone: one row per API/CSV import run
+// ─────────────────────────────────────────────
+model RawImport {
+  id         String   @id @default(cuid())
+  platform   Platform
+  importedAt DateTime @default(now())
+  payload    Json     // raw API/CSV response, never mutated
+  processed  Boolean  @default(false)
+
+  @@map("raw_imports")
+}
+
+// ─────────────────────────────────────────────
+// Canonical product catalog (platform-agnostic)
+// ─────────────────────────────────────────────
+model Product {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  listings    PlatformListing[]
+  orderItems  OrderItem[]
+
+  @@map("products")
+}
+
+// ─────────────────────────────────────────────
+// Per-platform listing (one product → many listings)
+// ─────────────────────────────────────────────
+model PlatformListing {
+  id                String   @id @default(cuid())
+  platform          Platform
+  platformListingId String   // Etsy listing_id or TikTok product_id
+  productId         String
+  title             String
+  priceUsd          Decimal  @db.Decimal(10, 2)
+  currency          String   @default("USD")
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  product    Product     @relation(fields: [productId], references: [id])
+  orderItems OrderItem[]
+
+  @@unique([platform, platformListingId])
+  @@map("platform_listings")
+}
+
+// ─────────────────────────────────────────────
+// Orders (both platforms, refunds as negative rows)
+// ─────────────────────────────────────────────
+model Order {
+  id               String      @id @default(cuid())
+  platform         Platform
+  platformOrderId  String
+  status           OrderStatus
+  buyerEmail       String?
+  currencyOriginal String      // original currency from platform
+  totalUsd         Decimal     @db.Decimal(10, 2) // converted at import
+  placedAt         DateTime    // UTC
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  items OrderItem[]
+  fees  Fee[]
+
+  @@unique([platform, platformOrderId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                String   @id @default(cuid())
+  orderId           String
+  productId         String?
+  platformListingId String?
+  quantity          Int
+  unitPriceUsd      Decimal  @db.Decimal(10, 2)
+  // negative quantity or unitPrice = refund/return
+  isRefund          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  order           Order            @relation(fields: [orderId], references: [id])
+  product         Product?         @relation(fields: [productId], references: [id])
+  platformListing PlatformListing? @relation(fields: [platformListingId], references: [id])
+
+  @@map("order_items")
+}
+
+// ─────────────────────────────────────────────
+// Platform fees, shipping, taxes per order
+// ─────────────────────────────────────────────
+model Fee {
+  id        String  @id @default(cuid())
+  orderId   String
+  feeType   FeeType
+  amountUsd Decimal @db.Decimal(10, 2) // negative = a credit/refund of fees
+  label     String? // human-readable, e.g. "Etsy transaction fee"
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("fees")
+}
+
+// ─────────────────────────────────────────────
+// OAuth tokens per platform
+// ─────────────────────────────────────────────
+model PlatformAuth {
+  id           String   @id @default(cuid())
+  platform     Platform @unique
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  scope        String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("platform_auth")
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+enum Platform {
+  ETSY
+  TIKTOK
+  CSV
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  COMPLETE
+  CANCELLED
+  REFUNDED
+  PARTIAL_REFUND
+}
+
+enum FeeType {
+  TRANSACTION
+  LISTING
+  PAYMENT_PROCESSING
+  SHIPPING
+  TAX
+  PLATFORM_COMMISSION
+  OTHER
+}
