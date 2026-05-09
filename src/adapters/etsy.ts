@@ -49,24 +49,44 @@ function toUsd(amount: number, divisor: number): number {
 export class EtsyAdapter implements PlatformAdapter {
   platform = "ETSY" as const;
 
-  private async getToken(): Promise<string> {
+  private async getAuth(): Promise<{ token: string; shopId: number; apiKey: string }> {
     const auth = await prisma.platformAuth.findUnique({ where: { platform: "ETSY" } });
     if (!auth) throw new Error("Etsy not connected");
-    return auth.accessToken;
+
+    let apiKey: string | null = null;
+    try {
+      const meta = JSON.parse(auth.scope ?? "{}");
+      apiKey = meta.api_key ?? null;
+    } catch {}
+
+    // Access token format is "{user_id}.{token}" — extract user_id directly from the token
+    const userId = auth.accessToken.split(".")[0];
+    if (!userId || isNaN(Number(userId))) throw new Error("Could not extract user_id from Etsy access token");
+
+    // Fetch shop via user_id using the api_key Etsy returned in the token response
+    const effectiveApiKey = apiKey ?? process.env.ETSY_CLIENT_ID!;
+    const shopRes = await fetch(`${ETSY_API}/application/users/${userId}/shops`, {
+      headers: this.etsyHeaders(auth.accessToken, effectiveApiKey),
+    });
+    if (!shopRes.ok) {
+      const body = await shopRes.text();
+      throw new Error(`Etsy shop fetch failed: ${shopRes.status} — ${body}`);
+    }
+    const shop = await shopRes.json();
+    const shopId = shop.shop_id;
+    if (!shopId) throw new Error("No shop found for this Etsy account");
+    return { token: auth.accessToken, shopId, apiKey: effectiveApiKey };
   }
 
-  private async getShopId(token: string): Promise<number> {
-    const res = await fetch(`${ETSY_API}/application/shops?limit=1`, {
-      headers: { "x-api-key": process.env.ETSY_CLIENT_ID!, Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error(`Etsy shops fetch failed: ${res.status}`);
-    const data = await res.json();
-    return data.results[0].shop_id;
+  private etsyHeaders(token: string, apiKey?: string) {
+    return {
+      Authorization: `Bearer ${token}`,
+      ...(apiKey ? { "x-api-key": apiKey } : {}),
+    };
   }
 
   async fetchAndStore(): Promise<string> {
-    const token = await this.getToken();
-    const shopId = await this.getShopId(token);
+    const { token, shopId, apiKey } = await this.getAuth();
 
     const allReceipts: EtsyReceipt[] = [];
     let offset = 0;
@@ -75,7 +95,7 @@ export class EtsyAdapter implements PlatformAdapter {
     while (true) {
       const res = await fetch(
         `${ETSY_API}/application/shops/${shopId}/receipts?limit=${limit}&offset=${offset}&was_paid=true`,
-        { headers: { "x-api-key": process.env.ETSY_CLIENT_ID!, Authorization: `Bearer ${token}` } }
+        { headers: this.etsyHeaders(token, apiKey) }
       );
       if (!res.ok) throw new Error(`Etsy receipts fetch failed: ${res.status}`);
       const data = await res.json();

@@ -47,6 +47,12 @@ export async function GET(req: NextRequest) {
 
   const token = await tokenRes.json();
 
+  // Etsy returns user_id and api_key in the token response — store for later use
+  const meta = JSON.stringify({
+    user_id: token.user_id ?? null,
+    api_key: token.api_key ?? null,
+  });
+
   await prisma.platformAuth.upsert({
     where: { platform: "ETSY" },
     create: {
@@ -56,7 +62,7 @@ export async function GET(req: NextRequest) {
       expiresAt: token.expires_in
         ? new Date(Date.now() + token.expires_in * 1000)
         : null,
-      scope: token.scope ?? null,
+      scope: meta,
     },
     update: {
       accessToken: token.access_token,
@@ -64,7 +70,7 @@ export async function GET(req: NextRequest) {
       expiresAt: token.expires_in
         ? new Date(Date.now() + token.expires_in * 1000)
         : null,
-      scope: token.scope ?? null,
+      scope: meta,
     },
   });
 
