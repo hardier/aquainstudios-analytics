@@ -137,14 +137,18 @@ export class EtsyAdapter implements PlatformAdapter {
       for (const tx of receipt.transactions) {
         const listingId = tx.listing_id.toString();
 
-        // Ensure product exists
+        // Parse variant label from product_data e.g. "Blue / Large"
+        const variantLabel = tx.product_data?.property_values
+          ?.map((p) => p.values.join(", "))
+          .filter(Boolean)
+          .join(" / ") || null;
+
         const product = await prisma.product.upsert({
           where: { id: `etsy-${tx.listing_id}` },
           create: { id: `etsy-${tx.listing_id}`, title: tx.title },
           update: { title: tx.title },
         });
 
-        // Ensure platform listing exists
         const listing = await prisma.platformListing.upsert({
           where: { platform_platformListingId: { platform: "ETSY", platformListingId: listingId } },
           create: {
@@ -169,11 +173,13 @@ export class EtsyAdapter implements PlatformAdapter {
             platformListingId: listing.id,
             quantity: tx.quantity,
             unitPriceUsd: toUsd(tx.price.amount, tx.price.divisor),
+            variantLabel,
             isRefund: false,
           },
           update: {
             quantity: tx.quantity,
             unitPriceUsd: toUsd(tx.price.amount, tx.price.divisor),
+            variantLabel,
           },
         });
       }

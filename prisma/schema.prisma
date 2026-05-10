@@ -86,6 +86,7 @@ model OrderItem {
   platformListingId String?
   quantity          Int
   unitPriceUsd      Decimal  @db.Decimal(10, 2)
+  variantLabel      String?  // e.g. "Blue / Large"
   // negative quantity or unitPrice = refund/return
   isRefund          Boolean  @default(false)
   createdAt         DateTime @default(now())
