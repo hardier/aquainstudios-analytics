@@ -1,4 +1,5 @@
-import type { Platform, OrderStatus } from "@prisma/client";
+export type Platform = "ETSY" | "TIKTOK" | "CSV";
+export type OrderStatus = "PENDING" | "PAID" | "SHIPPED" | "COMPLETE" | "CANCELLED" | "REFUNDED" | "PARTIAL_REFUND";
 
 export interface NormalizedOrder {
   platform: Platform;
@@ -27,8 +28,6 @@ export interface NormalizedFee {
 
 export interface PlatformAdapter {
   platform: Platform;
-  /** Fetch and persist raw data; returns the raw_import id */
   fetchAndStore(): Promise<string>;
-  /** Transform stored raw rows into canonical schema */
   processRaw(rawImportId: string): Promise<NormalizedOrder[]>;
 }

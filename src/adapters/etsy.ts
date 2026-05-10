@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { PlatformAdapter, NormalizedOrder } from "./types";
-import type { OrderStatus, FeeType } from ".prisma/client";
+type OrderStatus = "PENDING" | "PAID" | "SHIPPED" | "COMPLETE" | "CANCELLED" | "REFUNDED" | "PARTIAL_REFUND";
+type FeeType = "TRANSACTION" | "LISTING" | "PAYMENT_PROCESSING" | "SHIPPING" | "TAX" | "PLATFORM_COMMISSION" | "OTHER";
 
 const ETSY_API = "https://openapi.etsy.com/v3";
 

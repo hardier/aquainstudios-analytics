@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { PlatformAdapter, NormalizedOrder } from "./types";
-import type { OrderStatus } from ".prisma/client";
+type OrderStatus = "PENDING" | "PAID" | "SHIPPED" | "COMPLETE" | "CANCELLED" | "REFUNDED" | "PARTIAL_REFUND";
 
 const TIKTOK_API = "https://open-api.tiktokglobalshop.com";
 
