@@ -27,6 +27,11 @@ interface ProductRow {
   units: number; order_count: number;
   gross: number; avg_price: number;
 }
+interface HistoryRow {
+  period: string; productId: string; title: string;
+  variantLabel: string | null; platform: string;
+  units: number; gross: number;
+}
 
 function productUrl(platform: string, listingId: string | null): string | null {
   if (!listingId) return null;
@@ -83,6 +88,8 @@ export default function Dashboard() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [chart, setChart] = useState<ChartData | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
+  const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [historyInterval, setHistoryInterval] = useState("day");
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
@@ -101,8 +108,15 @@ export default function Dashboard() {
     setProducts(p.products ?? []);
   }, [range, productSort]);
 
+  const fetchHistory = useCallback(async () => {
+    const h = await fetch(`/api/analytics/product-history?range=${range}`).then((r) => r.json());
+    setHistory(h.rows ?? []);
+    setHistoryInterval(h.interval ?? "day");
+  }, [range]);
+
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   const totalRevenue = (overview?.platformBreakdown ?? []).reduce((s, p) => s + p.grossRevenue, 0) || 1;
 
@@ -223,7 +237,7 @@ export default function Dashboard() {
                   <tbody>
                     {products.map((p, i) => (
                       <tr key={`${p.productId}-${p.variantLabel}-${i}`} className="border-t border-gray-50 hover:bg-gray-50">
-                        <td className="px-5 py-3 font-medium text-gray-800 max-w-[220px] truncate">{p.title}</td>
+                        <td className="px-5 py-3 font-medium text-gray-800 min-w-[200px] whitespace-normal break-words" title={p.title}>{p.title}</td>
                         <td className="px-5 py-3 text-gray-500 text-xs">{p.variantLabel ?? "—"}</td>
                         <td className="px-5 py-3">
                           <span className={`rounded-full px-2 py-0.5 text-xs font-medium text-white ${PLATFORM_COLORS[p.platform] ?? "bg-gray-400"}`}>
@@ -246,6 +260,58 @@ export default function Dashboard() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Product History */}
+          <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h2 className="text-sm font-semibold text-gray-700">
+                Product History{" "}
+                <span className="ml-1 text-xs font-normal text-gray-400">
+                  ({historyInterval === "week" ? "weekly" : "daily"} breakdown)
+                </span>
+              </h2>
+            </div>
+            {history.length === 0 ? (
+              <p className="px-5 py-8 text-sm text-gray-400">No data yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
+                      <th className="px-5 py-3">Period</th>
+                      <th className="px-5 py-3">Product</th>
+                      <th className="px-5 py-3">Variant</th>
+                      <th className="px-5 py-3">Platform</th>
+                      <th className="px-5 py-3 text-right">Units</th>
+                      <th className="px-5 py-3 text-right">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((h, i) => {
+                      const d = new Date(h.period);
+                      const label = historyInterval === "week"
+                        ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " wk"
+                        : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+                      return (
+                        <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                          <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{label}</td>
+                          <td className="px-5 py-3 font-medium text-gray-800 min-w-[200px] whitespace-normal break-words" title={h.title}>{h.title}</td>
+                          <td className="px-5 py-3 text-xs text-gray-500">{h.variantLabel ?? "—"}</td>
+                          <td className="px-5 py-3">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium text-white ${PLATFORM_COLORS[h.platform] ?? "bg-gray-400"}`}>
+                              {h.platform}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-right text-gray-600">{h.units}</td>
+                          <td className="px-5 py-3 text-right font-semibold text-gray-900">{fmt(h.gross)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
