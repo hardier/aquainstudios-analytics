@@ -37,8 +37,8 @@ interface HistoryRow {
 
 function orderUrl(platform: string, platformOrderId: string | null): string | null {
   if (!platformOrderId) return null;
-  if (platform === "ETSY") return `https://www.etsy.com/your-account/orders/${platformOrderId}`;
-  return null; // TikTok order URL requires seller center login; not publicly linkable
+  if (platform === "ETSY") return `https://www.etsy.com/your/orders/sold?ref=seller-platform-mcnav&order_id=${platformOrderId}`;
+  return null; // TikTok order links require seller center session; no public URL
 }
 
 function productUrl(platform: string, listingId: string | null): string | null {

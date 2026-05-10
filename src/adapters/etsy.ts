@@ -41,6 +41,7 @@ interface EtsyTransaction {
   quantity: number;
   price: { amount: number; divisor: number; currency_code: string };
   product_data?: { property_values?: { property_name: string; values: string[] }[] };
+  selected_variations?: { formatted_name: string; formatted_value: string }[];
 }
 
 function toUsd(amount: number, divisor: number): number {
@@ -81,6 +82,7 @@ export class EtsyAdapter implements PlatformAdapter {
   async fetchAndStore(): Promise<string> {
     const { token, shopId } = await this.getAuth();
 
+    // Fetch all receipts (order-level data)
     const allReceipts: EtsyReceipt[] = [];
     let offset = 0;
     const limit = 100;
@@ -95,6 +97,33 @@ export class EtsyAdapter implements PlatformAdapter {
       allReceipts.push(...data.results);
       if (data.results.length < limit) break;
       offset += limit;
+    }
+
+    // Fetch all shop transactions separately — the receipts endpoint embeds a
+    // simplified transaction object that omits product_data/selected_variations.
+    // The shop transactions endpoint returns full data including variant info.
+    const txById = new Map<number, EtsyTransaction>();
+    let txOffset = 0;
+    while (true) {
+      const res = await fetch(
+        `${ETSY_API}/application/shops/${shopId}/transactions?limit=${limit}&offset=${txOffset}`,
+        { headers: this.etsyHeaders(token) }
+      );
+      if (!res.ok) break; // non-fatal: fall back to receipt-embedded data
+      const data = await res.json();
+      for (const tx of data.results as EtsyTransaction[]) {
+        txById.set(tx.transaction_id, tx);
+      }
+      if (data.results.length < limit) break;
+      txOffset += limit;
+    }
+
+    // Merge full transaction data into receipt transactions
+    for (const receipt of allReceipts) {
+      receipt.transactions = receipt.transactions.map((tx) => {
+        const full = txById.get(tx.transaction_id);
+        return full ? { ...tx, ...full } : tx;
+      });
     }
 
     const raw = await prisma.rawImport.create({
@@ -137,11 +166,17 @@ export class EtsyAdapter implements PlatformAdapter {
       for (const tx of receipt.transactions) {
         const listingId = tx.listing_id.toString();
 
-        // Parse variant label from product_data e.g. "Blue / Large"
-        const variantLabel = tx.product_data?.property_values
-          ?.map((p) => p.values.join(", "))
+        // Parse variant label. Try property_values first (full tx data), then
+        // selected_variations (older API shape), then fall back to null.
+        const fromPropertyValues = tx.product_data?.property_values
+          ?.map((p) => p.values.filter(Boolean).join(", "))
           .filter(Boolean)
           .join(" / ") || null;
+        const fromSelectedVariations = tx.selected_variations
+          ?.map((v) => v.formatted_value)
+          .filter(Boolean)
+          .join(" / ") || null;
+        const variantLabel = fromPropertyValues ?? fromSelectedVariations ?? null;
 
         const product = await prisma.product.upsert({
           where: { id: `etsy-${tx.listing_id}` },
