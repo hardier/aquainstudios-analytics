@@ -23,8 +23,16 @@ interface ChartPoint { period: string; etsy: number; tiktok: number; net: number
 interface ChartData { interval: string; data: ChartPoint[]; }
 interface ProductRow {
   productId: string; title: string; variantLabel: string | null;
-  platform: string; units: number; order_count: number;
+  platform: string; platformListingId: string | null;
+  units: number; order_count: number;
   gross: number; avg_price: number;
+}
+
+function productUrl(platform: string, listingId: string | null): string | null {
+  if (!listingId) return null;
+  if (platform === "ETSY") return `https://www.etsy.com/listing/${listingId}`;
+  if (platform === "TIKTOK") return `https://www.tiktok.com/view/product/${listingId}`;
+  return null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -129,7 +137,7 @@ export default function Dashboard() {
         <>
           {/* KPI row */}
           <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <KpiCard label="Net Revenue" value={fmt(overview.kpis.netRevenue)} sub={`Gross ${fmt(overview.kpis.grossRevenue)}`} />
+            <KpiCard label="Net Profit" value={fmt(overview.kpis.netRevenue)} sub={`Gross ${fmt(overview.kpis.grossRevenue)}`} />
             <KpiCard label="Orders" value={overview.kpis.orderCount.toString()} />
             <KpiCard label="Avg Order Value" value={fmt(overview.kpis.avgOrderValue)} />
             <KpiCard label="Refund Rate" value={`${(overview.kpis.refundRate * 100).toFixed(1)}%`} sub={`Fees ${fmt(overview.kpis.totalFees)}`} />
@@ -209,6 +217,7 @@ export default function Dashboard() {
                       <th className="px-5 py-3 text-right">Orders</th>
                       <th className="px-5 py-3 text-right">Avg Price</th>
                       <th className="px-5 py-3 text-right">Revenue</th>
+                      <th className="px-5 py-3"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -225,6 +234,16 @@ export default function Dashboard() {
                         <td className="px-5 py-3 text-right text-gray-600">{p.order_count}</td>
                         <td className="px-5 py-3 text-right text-gray-600">{fmt(p.avg_price)}</td>
                         <td className="px-5 py-3 text-right font-semibold text-gray-900">{fmt(p.gross)}</td>
+                        <td className="px-5 py-3 text-right">
+                          {productUrl(p.platform, p.platformListingId) ? (
+                            <a href={productUrl(p.platform, p.platformListingId)!} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-indigo-500 hover:underline">
+                              View ↗
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

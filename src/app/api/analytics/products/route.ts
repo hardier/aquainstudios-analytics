@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     title: string;
     variantLabel: string | null;
     platform: string;
+    platformListingId: string | null;
     units: number;
     order_count: number;
     gross: number;
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
       p.title,
       oi."variantLabel",
       o.platform::text AS platform,
+      pl."platformListingId",
       SUM(oi.quantity)::int AS units,
       COUNT(DISTINCT oi."orderId")::int AS order_count,
       SUM(oi.quantity * oi."unitPriceUsd")::float AS gross,
@@ -44,10 +46,11 @@ export async function GET(req: NextRequest) {
     FROM order_items oi
     JOIN orders o ON o.id = oi."orderId"
     JOIN products p ON p.id = oi."productId"
+    LEFT JOIN platform_listings pl ON pl.id = oi."platformListingId"
     WHERE o."placedAt" >= $1
       AND o.status NOT IN ('CANCELLED', 'REFUNDED')
       AND oi."isRefund" = false
-    GROUP BY p.id, p.title, oi."variantLabel", o.platform
+    GROUP BY p.id, p.title, oi."variantLabel", o.platform, pl."platformListingId"
     ORDER BY ${orderByMap[sort]}
     LIMIT 50
   `, gte);
