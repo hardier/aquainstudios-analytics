@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     platform: string;
     units: number;
     gross: number;
+    fees: number;
   }[]>(`
     SELECT
       date_trunc('${interval}', o."placedAt") AS period,
@@ -29,10 +30,16 @@ export async function GET(req: NextRequest) {
       oi."variantLabel",
       o.platform::text AS platform,
       SUM(oi.quantity)::int AS units,
-      SUM(oi.quantity * oi."unitPriceUsd")::float AS gross
+      SUM(oi.quantity * oi."unitPriceUsd")::float AS gross,
+      COALESCE(SUM(f.total_fees), 0)::float AS fees
     FROM order_items oi
     JOIN orders o ON o.id = oi."orderId"
     JOIN products p ON p.id = oi."productId"
+    LEFT JOIN (
+      SELECT "orderId", SUM("amountUsd") AS total_fees
+      FROM fees
+      GROUP BY "orderId"
+    ) f ON f."orderId" = o.id
     WHERE o."placedAt" >= $1
       AND o.status NOT IN ('CANCELLED', 'REFUNDED')
       AND oi."isRefund" = false
@@ -47,6 +54,7 @@ export async function GET(req: NextRequest) {
     rows: rows.map((r) => ({
       ...r,
       period: new Date(r.period).toISOString(),
+      net: r.gross - r.fees,
     })),
   });
 }

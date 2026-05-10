@@ -30,7 +30,7 @@ interface ProductRow {
 interface HistoryRow {
   period: string; productId: string; title: string;
   variantLabel: string | null; platform: string;
-  units: number; gross: number;
+  units: number; gross: number; fees: number; net: number;
 }
 
 function productUrl(platform: string, listingId: string | null): string | null {
@@ -289,6 +289,8 @@ export default function Dashboard() {
                       <th className="px-5 py-3">Platform</th>
                       <th className="px-5 py-3 text-right">Units</th>
                       <th className="px-5 py-3 text-right">Revenue</th>
+                      <th className="px-5 py-3 text-right">Expenses</th>
+                      <th className="px-5 py-3 text-right">Net Profit</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -308,7 +310,9 @@ export default function Dashboard() {
                             </span>
                           </td>
                           <td className="px-5 py-3 text-right text-gray-600">{h.units}</td>
-                          <td className="px-5 py-3 text-right font-semibold text-gray-900">{fmt(h.gross)}</td>
+                          <td className="px-5 py-3 text-right text-gray-600">{fmt(h.gross)}</td>
+                          <td className="px-5 py-3 text-right text-red-500">{fmt(h.fees)}</td>
+                          <td className={`px-5 py-3 text-right font-semibold ${h.net >= 0 ? "text-green-700" : "text-red-600"}`}>{fmt(h.net)}</td>
                         </tr>
                       );
                     })}
