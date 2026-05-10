@@ -30,7 +30,15 @@ interface ProductRow {
 interface HistoryRow {
   period: string; productId: string; title: string;
   variantLabel: string | null; platform: string;
-  units: number; gross: number; fees: number; net: number;
+  units: number; order_count: number;
+  gross: number; fees: number; net: number;
+  platformOrderId: string | null;
+}
+
+function orderUrl(platform: string, platformOrderId: string | null): string | null {
+  if (!platformOrderId) return null;
+  if (platform === "ETSY") return `https://www.etsy.com/your-account/orders/${platformOrderId}`;
+  return null; // TikTok order URL requires seller center login; not publicly linkable
 }
 
 function productUrl(platform: string, listingId: string | null): string | null {
@@ -90,6 +98,7 @@ export default function Dashboard() {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyInterval, setHistoryInterval] = useState("day");
+  const [historyPlatform, setHistoryPlatform] = useState<"ALL" | "ETSY" | "TIKTOK">("ALL");
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
@@ -109,10 +118,10 @@ export default function Dashboard() {
   }, [range, productSort]);
 
   const fetchHistory = useCallback(async () => {
-    const h = await fetch(`/api/analytics/product-history?range=${range}`).then((r) => r.json());
+    const h = await fetch(`/api/analytics/product-history?range=${range}&platform=${historyPlatform}`).then((r) => r.json());
     setHistory(h.rows ?? []);
     setHistoryInterval(h.interval ?? "day");
-  }, [range]);
+  }, [range, historyPlatform]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
@@ -268,13 +277,23 @@ export default function Dashboard() {
 
           {/* Product History */}
           <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-100 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
               <h2 className="text-sm font-semibold text-gray-700">
                 Product History{" "}
                 <span className="ml-1 text-xs font-normal text-gray-400">
                   ({historyInterval === "week" ? "weekly" : "daily"} breakdown)
                 </span>
               </h2>
+              <div className="flex gap-1.5">
+                {(["ALL", "ETSY", "TIKTOK"] as const).map((p) => (
+                  <button key={p} onClick={() => setHistoryPlatform(p)}
+                    className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                      historyPlatform === p ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}>
+                    {p === "ALL" ? "All" : p === "ETSY" ? "Etsy" : "TikTok"}
+                  </button>
+                ))}
+              </div>
             </div>
             {history.length === 0 ? (
               <p className="px-5 py-8 text-sm text-gray-400">No data yet.</p>
@@ -291,6 +310,7 @@ export default function Dashboard() {
                       <th className="px-5 py-3 text-right">Revenue</th>
                       <th className="px-5 py-3 text-right">Expenses</th>
                       <th className="px-5 py-3 text-right">Net Profit</th>
+                      <th className="px-5 py-3"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -313,6 +333,18 @@ export default function Dashboard() {
                           <td className="px-5 py-3 text-right text-gray-600">{fmt(h.gross)}</td>
                           <td className="px-5 py-3 text-right text-red-500">{fmt(h.fees)}</td>
                           <td className={`px-5 py-3 text-right font-semibold ${h.net >= 0 ? "text-green-700" : "text-red-600"}`}>{fmt(h.net)}</td>
+                          <td className="px-5 py-3 text-right">
+                            {orderUrl(h.platform, h.platformOrderId) ? (
+                              <a href={orderUrl(h.platform, h.platformOrderId)!} target="_blank" rel="noopener noreferrer"
+                                className="text-xs text-indigo-500 hover:underline">
+                                Order ↗
+                              </a>
+                            ) : h.order_count > 1 ? (
+                              <span className="text-xs text-gray-400">{h.order_count} orders</span>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}

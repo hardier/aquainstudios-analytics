@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const range = req.nextUrl.searchParams.get("range") ?? "30d";
+  const platform = req.nextUrl.searchParams.get("platform") ?? "ALL";
 
   const now = new Date();
   const gte =
@@ -13,6 +14,10 @@ export async function GET(req: NextRequest) {
 
   const interval = range === "all" || range === "90d" ? "week" : "day";
 
+  const platformFilter = platform === "ETSY" || platform === "TIKTOK"
+    ? `AND o.platform = '${platform}'::\"Platform\"`
+    : "";
+
   const rows = await prisma.$queryRawUnsafe<{
     period: Date;
     productId: string;
@@ -20,8 +25,10 @@ export async function GET(req: NextRequest) {
     variantLabel: string | null;
     platform: string;
     units: number;
+    order_count: number;
     gross: number;
     fees: number;
+    platformOrderId: string | null;
   }[]>(`
     SELECT
       date_trunc('${interval}', o."placedAt") AS period,
@@ -30,8 +37,10 @@ export async function GET(req: NextRequest) {
       oi."variantLabel",
       o.platform::text AS platform,
       SUM(oi.quantity)::int AS units,
+      COUNT(DISTINCT o.id)::int AS order_count,
       SUM(oi.quantity * oi."unitPriceUsd")::float AS gross,
-      COALESCE(SUM(f.total_fees), 0)::float AS fees
+      COALESCE(SUM(f.total_fees), 0)::float AS fees,
+      CASE WHEN COUNT(DISTINCT o.id) = 1 THEN MIN(o."platformOrderId") ELSE NULL END AS "platformOrderId"
     FROM order_items oi
     JOIN orders o ON o.id = oi."orderId"
     JOIN products p ON p.id = oi."productId"
@@ -43,6 +52,7 @@ export async function GET(req: NextRequest) {
     WHERE o."placedAt" >= $1
       AND o.status NOT IN ('CANCELLED', 'REFUNDED')
       AND oi."isRefund" = false
+      ${platformFilter}
     GROUP BY period, p.id, p.title, oi."variantLabel", o.platform
     ORDER BY period DESC, gross DESC
     LIMIT 200
